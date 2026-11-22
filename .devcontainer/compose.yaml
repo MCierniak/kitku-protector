@@ -1,0 +1,62 @@
+# Two containers that start together:
+#   dev  - the development container that VS Code and Claude Code run in
+#   lab  - QEMU with KVM and the lab control daemon (labd)
+#
+# The KITKU_* variables come from .env, which initialize.sh writes on the host.
+name: kitku-protector
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: dev.Dockerfile
+      args:
+        USERNAME: ${KITKU_USER}
+        USER_UID: ${KITKU_UID}
+        USER_GID: ${KITKU_GID}
+        USER_HOME: ${KITKU_HOME}
+        WORKSPACE_DIR: ${KITKU_WORKSPACE}
+    init: true
+    command: ["sleep", "infinity"]
+    environment:
+      # Where the test rig finds the lab.
+      KITKU_LAB_URL: http://lab:7780
+      # Keeps Claude Code's per-machine state file inside the mounted directory.
+      CLAUDE_CONFIG_DIR: ${KITKU_HOME}/.claude
+    volumes:
+      # Same absolute paths as on the host.
+      - ..:${KITKU_WORKSPACE}
+      - ${KITKU_HOME}/.claude:${KITKU_HOME}/.claude
+      - ${KITKU_PRP_STORE}:${KITKU_PRP_STORE}
+    depends_on:
+      lab:
+        condition: service_healthy
+
+  lab:
+    build:
+      context: ../lab
+    init: true
+    # Run the daemon from the workspace, so that edits need a restart and no rebuild.
+    command: ["python3", "${KITKU_WORKSPACE}/lab/labd.py"]
+    devices:
+      - /dev/kvm
+    volumes:
+      # The workspace, read-only and at the same path, so that files the development
+      # container builds (answer files, ACPI tables) are visible to QEMU.
+      - ..:${KITKU_WORKSPACE}:ro
+      # Installation media.
+      - ${KITKU_ISO_DIR}:/iso:ro
+      # Disk images, overlays, TPM state, logs.
+      - lab-data:/var/lib/kitku-lab
+    # No ports are published: labd has no authentication and is meant to be reachable
+    # from the development container only. To watch a guest's screen from the host,
+    # give QEMU "-vnc 0.0.0.0:0" and publish the port in a compose override file:
+    #   ports: ["127.0.0.1:5900:5900"]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7780/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  lab-data:

@@ -1,0 +1,4 @@
+# Generated per machine by initialize.sh, and per-machine overrides
+.env
+.env.*
+local.env

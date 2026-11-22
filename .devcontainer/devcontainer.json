@@ -1,0 +1,30 @@
+// Development container for KitkuProtector.
+// Opening it starts two containers together: "dev" (this one) and "lab" (QEMU with KVM).
+{
+    "name": "KitkuProtector",
+    "dockerComposeFile": "compose.yaml",
+    "service": "dev",
+    "runServices": ["dev", "lab"],
+
+    // The workspace is mounted at the same absolute path as on the host, because
+    // Claude Code and the PRP tools key their state by that path.
+    "workspaceFolder": "${localWorkspaceFolder}",
+
+    // Runs on the host first and writes .devcontainer/.env for the compose file.
+    "initializeCommand": "bash .devcontainer/initialize.sh",
+
+    // The image is built with the host user's name and IDs.
+    "remoteUser": "${localEnv:USER}",
+    "updateRemoteUserUID": false,
+
+    "shutdownAction": "stopCompose",
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "anthropic.claude-code",
+                "ms-python.python"
+            ]
+        }
+    }
+}
